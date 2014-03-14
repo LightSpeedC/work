@@ -5,22 +5,18 @@ var net  = require('net');
 var co   = require('co');
 var chan = require('chan');
 
-var HTTP_PORT = process.argv[2] || 9999;  // proxy service port
-var PASV_PORT = process.argv[3] || 9090;  // passive service port
+var HTTP_PORT = 9999;  // proxy service port
+var PASV_PORT = 9090;  // passive service port
 
 console.log('HTTP_PORT:', HTTP_PORT);
 console.log('PASV_PORT:', PASV_PORT);
 
-// proxy connection pool
-var proxyConnectionPool = [];
-
 // chan passive new socket
-var chanNewSocket = chan();
+var chanPassivePort = chan();
 
 var passiveServer = net.createServer(function onCliConnPassive(cliSoc) {
   console.log('new passive socket connected');
-  proxyConnectionPool.push(cliSoc);
-  chanNewSocket();
+  chanPassivePort(cliSoc);
 }).listen(PASV_PORT, function () {
   console.log('passive port started on port ' + PASV_PORT);
 });
@@ -32,10 +28,9 @@ passiveServer.on('error', function onSvrErrPassive(err) {
 var server = net.createServer(function (cliSoc) {
   console.log('new proxy socket connected');
   co(function *() {
-    yield chanNewSocket;
+    console.log('passive socket waiting');
+    var svrSoc = yield chanPassivePort;
     console.log('proxy and passive socket connecting');
-    var svrSoc = proxyConnectionPool.shift();
-    if (!svrSoc) throw new Error('eh? svrSoc does not exist!!!');
     svrSoc.pipe(cliSoc);
     cliSoc.pipe(svrSoc);
     svrSoc.on('error', funcOnSocErr(cliSoc, 'svrSoc', ''));

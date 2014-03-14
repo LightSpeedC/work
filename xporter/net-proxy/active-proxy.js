@@ -2,10 +2,11 @@
 var net  = require('net');
 var co   = require('co');
 var chan = require('chan');
-var PROXY_HOST = 'localhost';  // proxy server host
-var PROXY_PORT = 8888;         // proxy server port
-var PASV_HOST  = 'localhost';  // passive server host
-var PASV_PORT  = 9090;         // passive server port
+
+var PROXY_HOST = process.argv[2] || 'localhost';  // proxy server host
+var PROXY_PORT = process.argv[3] || 8888;         // proxy server port
+var PASV_HOST  = process.argv[4] || 'localhost';  // passive server host
+var PASV_PORT  = process.argv[5] || 9090;         // passive server port
 
 if (!PROXY_HOST) return console.log('proxy server not found');
 
@@ -74,6 +75,7 @@ function* newSoc() {
           //});
           svrSoc.on('end', chSvrEnd);
           svrSoc.on('error', chSvrErr);
+          co(newSoc);
         } // if !svrSoc
         svrSoc.write(buff);
       }
@@ -114,7 +116,7 @@ function* newSoc() {
   } // while loop
 } // newSoc
 
-for (var i = 0; i < 100; ++i)
+for (var i = 0; i < 10; ++i)
   co(newSoc)();
 
 //server.on('error', function onSvrErr(err) {

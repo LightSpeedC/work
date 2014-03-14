@@ -5,8 +5,8 @@ var net  = require('net');
 var co   = require('co');
 var chan = require('chan');
 
-var HTTP_PORT = 9999;  // proxy service port
-var PASV_PORT = 9090;  // passive service port
+var HTTP_PORT = Number(process.argv[2] || 9999);  // proxy service port
+var PASV_PORT = Number(process.argv[3] || 9090);  // passive service port
 
 console.log('HTTP_PORT:', HTTP_PORT);
 console.log('PASV_PORT:', PASV_PORT);
@@ -44,13 +44,13 @@ var server = net.createServer(function (cliSoc) {
     } // funcOnSocErr
   })(); // co
 }).listen(HTTP_PORT, function () {
-  console.log('proxy port started on port ' + HTTP_PORT);
+  console.log('proxy port   started on port ' + HTTP_PORT);
 });
 
 server.on('error', function onSvrErr(err) {
   console.log('%s %s: %s', new Date().toLocaleTimeString(), 'svrErr', err);
 });
 
-console.log('proxy port starting - port ' + HTTP_PORT);
+console.log('proxy port   starting - port ' + HTTP_PORT);
 
 // 日本語

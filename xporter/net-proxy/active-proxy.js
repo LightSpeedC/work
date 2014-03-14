@@ -10,28 +10,45 @@ var PASV_PORT  = process.argv[5] || 9090;         // passive server port
 
 if (!PROXY_HOST) return console.log('proxy server not found');
 
+var passiveConnCount = 0;
+var proxyConnCount = 0;
+
+function errorGuard() {
+  process.on('uncaughtException', function (err) {
+    console.log('uncExc(%s)(%s) %s', proxyConnCount, passiveConnCount, err + '');
+  });
+}
+errorGuard();
+
 // net.conncet thunkify
-function net_connect(port, host) {
-  return function (cb) {
+function connectAsync(port, host) {
+  return function connectThunk(cb) {
     var soc = net.connect(port, host, function () {
+      soc.removeListener('error', onError);
       cb(null, soc);
     });
-    soc.on('error', function onError(err) {
+    soc.on('error', onError);
+    function onError(err) {
       soc.removeListener('error', onError);
       cb(err, null);
-    });
+    }
   };
-} // net_connect
+} // connectAsync
+net.connectAsync = connectAsync;
+
 
 function* newSoc() {
   console.log('passive port connecting');
   try {
-    var cliSoc = yield net_connect(PASV_PORT, PASV_HOST);
+    var cliSoc = yield net.connectAsync(PASV_PORT, PASV_HOST);
+    ++passiveConnCount;
+    console.log('(%s) passive port connected', passiveConnCount);
   } catch (err) {
-    console.log('passive port connect fail: ' + err);
-    process.exit(1);
+    console.log('(%s) passive port connect fail: %s', passiveConnCount, err + '');
+    setTimeout(function () { co(newSoc)(); }, 3000);
+    return;
+    // return process.exit(1);
   }
-  console.log('passive port connected');
 
   var svrSoc;
   var chCliRead = chan();
@@ -58,22 +75,23 @@ function* newSoc() {
       var buff = cliSoc.read();
       if (buff) {
         if (!svrSoc) {
-          console.log('proxy port connecting');
+          // console.log('proxy port connecting');
           try {
-            svrSoc = yield net_connect(PROXY_PORT, PROXY_HOST);
+            svrSoc = yield net.connectAsync(PROXY_PORT, PROXY_HOST);
+            ++proxyConnCount;
+            console.log('[%s] proxy port connected', proxyConnCount);
             bSvrAlive = true;
           } catch (err) {
-            console.log('proxy port connect fail: ' + err);
-            process.exit(1);
+            console.log('[%s] proxy port connect fail: %s', proxyConnCount, err + '');
+            return process.exit(1);
           }
-          console.log('proxy port connected');
 
           svrSoc.pipe(cliSoc);
           //svrSoc.on('readable', function () {
           //  var buff = svrSoc.read();
           //  if (buff) cliSoc.write(buff);
           //});
-          svrSoc.on('end', chSvrEnd);
+          svrSoc.on('end',   chSvrEnd);
           svrSoc.on('error', chSvrErr);
           co(newSoc);
         } // if !svrSoc
@@ -84,7 +102,8 @@ function* newSoc() {
     case chCliEnd:
       yield chCliEnd.selected;
       if (svrSoc) svrSoc.end();
-      console.log('end of proxy port');
+      --passiveConnCount;
+      console.log('(%s) end of passive port', passiveConnCount);
       bCliAlive = false;
       break;
 
@@ -98,8 +117,8 @@ function* newSoc() {
     case chSvrEnd:
       yield chSvrEnd.selected;
       //cliSoc.end();
-      console.log('end of passive port');
-      co(newSoc)();
+      --proxyConnCount;
+      console.log('[%s] end of proxy port', proxyConnCount);
       bSvrAlive = false;
       break;
 
@@ -114,6 +133,8 @@ function* newSoc() {
       break;
     } // switch chan
   } // while loop
+
+  co(newSoc)();
 } // newSoc
 
 for (var i = 0; i < 10; ++i)
